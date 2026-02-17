@@ -59,11 +59,19 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --add-cloudsql-instances "${{ secrets.CLOUDSQL_CONNECTION_NAME }}" \
-            --set-env-vars "^@^DATABASE_URL=${{ secrets.DATABASE_URL }}@GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}@GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}@GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}@JWT_SECRET=${{ secrets.JWT_SECRET }}@WORKPLACE_NAME=Epic Systems@WORKPLACE_ADDRESS=1979 Milky Way, Verona, WI 53593@WORK_LAT=42.9914@WORK_LNG=-89.5326" \
+            --set-env-vars "^@^GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}@GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}@GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}@JWT_SECRET=${{ secrets.JWT_SECRET }}@WORKPLACE_NAME=Epic Systems@WORKPLACE_ADDRESS=1979 Milky Way, Verona, WI 53593@WORK_LAT=42.9914@WORK_LNG=-89.5326" \
             --memory 512Mi \
             --cpu 1 \
             --min-instances 0 \
             --max-instances 3
+
+          # DATABASE_URL must be set separately: it contains '@' which conflicts with
+          # the '^@^' separator used above, causing gcloud to truncate the value and
+          # pg to throw "TypeError: Invalid URL" at runtime.
+          gcloud run services update ${{ env.SERVICE_NAME }} \
+            --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
+            --update-env-vars "DATABASE_URL=${{ secrets.DATABASE_URL }}"
 
       - name: Set BASE_URL to service URL
         run: |
