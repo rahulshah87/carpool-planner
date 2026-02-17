@@ -2,7 +2,7 @@ name: Deploy to Cloud Run
 
 on:
   push:
-    branches: [claude/carpool-app-roadmap-tcKz7, main, master]
+    branches: [main, master]
 
 env:
   PROJECT_ID: carpool-planner-487718
