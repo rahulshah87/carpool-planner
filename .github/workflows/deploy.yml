@@ -30,14 +30,6 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Enable required APIs
-        run: |
-          gcloud services enable \
-            run.googleapis.com \
-            cloudbuild.googleapis.com \
-            artifactregistry.googleapis.com \
-            --project=${{ env.PROJECT_ID }}
-
       - name: Create Artifact Registry repo (if needed)
         run: |
           gcloud artifacts repositories describe ${{ env.REPO_NAME }} \
