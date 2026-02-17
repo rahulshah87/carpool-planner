@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import db from '../db';
+import pool from '../db';
 import { requireAuth } from '../auth';
 
 const router = Router();
@@ -8,23 +8,6 @@ const router = Router();
 // Workplace destination (Epic's Verona campus)
 const WORK_LAT = parseFloat(process.env.WORK_LAT || '42.9914');
 const WORK_LNG = parseFloat(process.env.WORK_LNG || '-89.5326');
-
-interface User {
-  id: string;
-  display_name: string;
-  home_lat: number | null;
-  home_lng: number | null;
-  home_address: string | null;
-}
-
-interface Preference {
-  user_id: string;
-  direction: string;
-  earliest_time: string;
-  latest_time: string;
-  days_of_week: string;
-  role: string;
-}
 
 // Haversine distance in miles
 function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -67,20 +50,20 @@ function rolesCompatible(role1: string, role2: string): boolean {
 }
 
 // Get matches for current user
-router.get('/', requireAuth, (req: Request, res: Response) => {
+router.get('/', requireAuth, async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const matches = db.prepare(`
+  const { rows: matches } = await pool.query(`
     SELECT mr.*,
-      CASE WHEN mr.user_a_id = ? THEN u2.display_name ELSE u1.display_name END as partner_name,
-      CASE WHEN mr.user_a_id = ? THEN u2.avatar_url ELSE u1.avatar_url END as partner_avatar,
-      CASE WHEN mr.user_a_id = ? THEN u2.home_neighborhood ELSE u1.home_neighborhood END as partner_neighborhood,
-      CASE WHEN mr.user_a_id = ? THEN mr.user_b_id ELSE mr.user_a_id END as partner_id
+      CASE WHEN mr.user_a_id = $1 THEN u2.display_name ELSE u1.display_name END as partner_name,
+      CASE WHEN mr.user_a_id = $1 THEN u2.avatar_url ELSE u1.avatar_url END as partner_avatar,
+      CASE WHEN mr.user_a_id = $1 THEN u2.home_neighborhood ELSE u1.home_neighborhood END as partner_neighborhood,
+      CASE WHEN mr.user_a_id = $1 THEN mr.user_b_id ELSE mr.user_a_id END as partner_id
     FROM match_results mr
     JOIN users u1 ON mr.user_a_id = u1.id
     JOIN users u2 ON mr.user_b_id = u2.id
-    WHERE mr.user_a_id = ? OR mr.user_b_id = ?
+    WHERE mr.user_a_id = $1 OR mr.user_b_id = $1
     ORDER BY mr.rank_score ASC
-  `).all(userId, userId, userId, userId, userId, userId);
+  `, [userId]);
 
   // Return neighborhood from geocoded data (no address parsing needed)
   const sanitized = matches.map(({ partner_neighborhood, ...m }: any) => ({
@@ -95,25 +78,31 @@ router.get('/', requireAuth, (req: Request, res: Response) => {
 router.post('/compute', requireAuth, async (req: Request, res: Response) => {
   const userId = req.user!.userId;
 
-  const currentUser = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as User;
+  const { rows: userRows } = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+  const currentUser = userRows[0];
   if (!currentUser?.home_lat || !currentUser?.home_lng) {
     res.status(400).json({ error: 'Please set your home address first' });
     return;
   }
 
-  const myPrefs = db.prepare('SELECT * FROM commute_preferences WHERE user_id = ?').all(userId) as Preference[];
+  const { rows: myPrefs } = await pool.query(
+    'SELECT * FROM commute_preferences WHERE user_id = $1', [userId]
+  );
   if (myPrefs.length === 0) {
     res.status(400).json({ error: 'Please set your commute preferences first' });
     return;
   }
 
   // Get all other users with addresses
-  const otherUsers = db.prepare(
-    'SELECT * FROM users WHERE id != ? AND home_lat IS NOT NULL AND home_lng IS NOT NULL'
-  ).all(userId) as User[];
+  const { rows: otherUsers } = await pool.query(
+    'SELECT * FROM users WHERE id != $1 AND home_lat IS NOT NULL AND home_lng IS NOT NULL',
+    [userId]
+  );
 
   // Clear old matches for this user
-  db.prepare('DELETE FROM match_results WHERE user_a_id = ? OR user_b_id = ?').run(userId, userId);
+  await pool.query(
+    'DELETE FROM match_results WHERE user_a_id = $1 OR user_b_id = $1', [userId]
+  );
 
   const DETOUR_THRESHOLD = parseFloat(process.env.DETOUR_THRESHOLD_MIN || '15');
   const DISTANCE_THRESHOLD = parseFloat(process.env.DISTANCE_THRESHOLD_MI || '30');
@@ -124,10 +113,12 @@ router.post('/compute', requireAuth, async (req: Request, res: Response) => {
 
   for (const other of otherUsers) {
     // Distance pre-filter
-    const dist = haversine(currentUser.home_lat!, currentUser.home_lng!, other.home_lat!, other.home_lng!);
+    const dist = haversine(currentUser.home_lat, currentUser.home_lng, other.home_lat, other.home_lng);
     if (dist > DISTANCE_THRESHOLD) continue;
 
-    const otherPrefs = db.prepare('SELECT * FROM commute_preferences WHERE user_id = ?').all(other.id) as Preference[];
+    const { rows: otherPrefs } = await pool.query(
+      'SELECT * FROM commute_preferences WHERE user_id = $1', [other.id]
+    );
 
     for (const myPref of myPrefs) {
       for (const otherPref of otherPrefs) {
@@ -137,9 +128,9 @@ router.post('/compute', requireAuth, async (req: Request, res: Response) => {
         // Role compatibility
         if (!rolesCompatible(myPref.role, otherPref.role)) continue;
 
-        // Schedule overlap
-        const myDays = JSON.parse(myPref.days_of_week);
-        const otherDays = JSON.parse(otherPref.days_of_week);
+        // Schedule overlap — days_of_week is JSONB, already parsed
+        const myDays: number[] = myPref.days_of_week;
+        const otherDays: number[] = otherPref.days_of_week;
         const { overlapMinutes, commonDays } = computeOverlap(
           myPref.earliest_time, myPref.latest_time, myDays,
           otherPref.earliest_time, otherPref.latest_time, otherDays
@@ -148,10 +139,9 @@ router.post('/compute', requireAuth, async (req: Request, res: Response) => {
         if (overlapMinutes === 0 || commonDays.length === 0) continue;
 
         // Estimate detour using haversine (rough approximation)
-        // Real implementation would use Google Distance Matrix API
-        const directToWork = haversine(currentUser.home_lat!, currentUser.home_lng!, WORK_LAT, WORK_LNG);
-        const viaOther = haversine(currentUser.home_lat!, currentUser.home_lng!, other.home_lat!, other.home_lng!)
-          + haversine(other.home_lat!, other.home_lng!, WORK_LAT, WORK_LNG);
+        const directToWork = haversine(currentUser.home_lat, currentUser.home_lng, WORK_LAT, WORK_LNG);
+        const viaOther = haversine(currentUser.home_lat, currentUser.home_lng, other.home_lat, other.home_lng)
+          + haversine(other.home_lat, other.home_lng, WORK_LAT, WORK_LNG);
         const detourMiles = viaOther - directToWork;
         // Rough conversion: 1 mile ≈ 2 minutes in suburban driving
         const detourMinutes = Math.max(0, detourMiles * 2);
@@ -161,10 +151,11 @@ router.post('/compute', requireAuth, async (req: Request, res: Response) => {
         const rankScore = (detourMinutes * W_DETOUR) - (overlapMinutes * W_OVERLAP);
 
         const matchId = uuidv4();
-        db.prepare(
+        await pool.query(
           `INSERT INTO match_results (id, user_a_id, user_b_id, direction, detour_minutes, time_overlap_minutes, rank_score)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
-        ).run(matchId, userId, other.id, myPref.direction, detourMinutes, overlapMinutes, rankScore);
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [matchId, userId, other.id, myPref.direction, detourMinutes, overlapMinutes, rankScore]
+        );
 
         newMatches.push({
           id: matchId,

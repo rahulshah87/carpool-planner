@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import { v4 as uuidv4 } from 'uuid';
-import db from '../db';
+import pool from '../db';
 import { signToken, requireAuth } from '../auth';
 
 const router = Router();
@@ -55,19 +55,23 @@ router.get('/google/callback', async (req: Request, res: Response) => {
     const avatarUrl = payload.picture || null;
 
     // Upsert user
-    const existingUser = db.prepare('SELECT id FROM users WHERE google_id = ?').get(googleId) as { id: string } | undefined;
+    const { rows: existing } = await pool.query(
+      'SELECT id FROM users WHERE google_id = $1', [googleId]
+    );
 
     let userId: string;
-    if (existingUser) {
-      userId = existingUser.id;
-      db.prepare(
-        'UPDATE users SET email = ?, display_name = ?, avatar_url = ?, updated_at = datetime(\'now\') WHERE id = ?'
-      ).run(email, displayName, avatarUrl, userId);
+    if (existing.length > 0) {
+      userId = existing[0].id;
+      await pool.query(
+        'UPDATE users SET email = $1, display_name = $2, avatar_url = $3, updated_at = NOW() WHERE id = $4',
+        [email, displayName, avatarUrl, userId]
+      );
     } else {
       userId = uuidv4();
-      db.prepare(
-        'INSERT INTO users (id, google_id, email, display_name, avatar_url) VALUES (?, ?, ?, ?, ?)'
-      ).run(userId, googleId, email, displayName, avatarUrl);
+      await pool.query(
+        'INSERT INTO users (id, google_id, email, display_name, avatar_url) VALUES ($1, $2, $3, $4, $5)',
+        [userId, googleId, email, displayName, avatarUrl]
+      );
     }
 
     // Issue JWT
@@ -88,13 +92,13 @@ router.get('/google/callback', async (req: Request, res: Response) => {
 });
 
 // Get current user
-router.get('/me', requireAuth, (req: Request, res: Response) => {
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user!.userId);
-  if (!user) {
+router.get('/me', requireAuth, async (req: Request, res: Response) => {
+  const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user!.userId]);
+  if (rows.length === 0) {
     res.status(404).json({ error: 'User not found' });
     return;
   }
-  res.json(user);
+  res.json(rows[0]);
 });
 
 // Logout

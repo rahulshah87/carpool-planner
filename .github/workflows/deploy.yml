@@ -52,18 +52,13 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
-          # NOTE: SQLite DB lives inside the container and is ephemeral.
-          # For production persistence, either:
-          #   1. Switch to Cloud SQL for PostgreSQL (recommended for Cloud Run)
-          #   2. Mount a persistent volume (NFS/Filestore) at /data
-          # See ROADMAP.md for details.
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --image ${{ env.IMAGE }} \
             --region ${{ env.REGION }} \
             --project ${{ env.PROJECT_ID }} \
             --platform managed \
             --allow-unauthenticated \
-            --set-env-vars "^@^GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}@GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}@GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}@JWT_SECRET=${{ secrets.JWT_SECRET }}@WORKPLACE_NAME=Epic Systems@WORKPLACE_ADDRESS=1979 Milky Way, Verona, WI 53593@WORK_LAT=42.9914@WORK_LNG=-89.5326" \
+            --set-env-vars "^@^DATABASE_URL=${{ secrets.DATABASE_URL }}@GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}@GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}@GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}@JWT_SECRET=${{ secrets.JWT_SECRET }}@WORKPLACE_NAME=Epic Systems@WORKPLACE_ADDRESS=1979 Milky Way, Verona, WI 53593@WORK_LAT=42.9914@WORK_LNG=-89.5326" \
             --memory 512Mi \
             --cpu 1 \
             --min-instances 0 \
