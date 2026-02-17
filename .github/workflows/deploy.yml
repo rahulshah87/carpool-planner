@@ -58,7 +58,8 @@ jobs:
             --project ${{ env.PROJECT_ID }} \
             --platform managed \
             --allow-unauthenticated \
-            --set-env-vars "^@^GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}@GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}@GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}@JWT_SECRET=${{ secrets.JWT_SECRET }}@WORKPLACE_NAME=Epic Systems@WORKPLACE_ADDRESS=1979 Milky Way, Verona, WI 53593@WORK_LAT=42.9914@WORK_LNG=-89.5326" \
+            --add-cloudsql-instances "${{ secrets.CLOUDSQL_CONNECTION_NAME }}" \
+            --set-env-vars "^@^DATABASE_URL=${{ secrets.DATABASE_URL }}@GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}@GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}@GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}@JWT_SECRET=${{ secrets.JWT_SECRET }}@WORKPLACE_NAME=Epic Systems@WORKPLACE_ADDRESS=1979 Milky Way, Verona, WI 53593@WORK_LAT=42.9914@WORK_LNG=-89.5326" \
             --memory 512Mi \
             --cpu 1 \
             --min-instances 0 \

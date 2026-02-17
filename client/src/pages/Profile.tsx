@@ -9,49 +9,56 @@ export default function Profile() {
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<any>(null);
 
-  // Attach Google Places Autocomplete to the text input as an enhancement
+  // Try to attach Google Places Autocomplete as an optional enhancement.
+  // If the API key is missing or invalid, the plain text input works fine
+  // and the server geocodes the address on save.
   useEffect(() => {
-    let script: HTMLScriptElement | null = null;
+    let cancelled = false;
 
     const initAutocomplete = () => {
-      if (!inputRef.current || !(window as any).google?.maps?.places) return;
-      if (autocompleteRef.current) return; // already initialized
+      if (cancelled || !inputRef.current) return;
+      if (!(window as any).google?.maps?.places?.Autocomplete) return;
+      if (autocompleteRef.current) return;
 
-      const autocomplete = new (window as any).google.maps.places.Autocomplete(
-        inputRef.current,
-        { types: ['address'], componentRestrictions: { country: 'us' } }
-      );
-
-      autocomplete.addListener('place_changed', () => {
-        const place = autocomplete.getPlace();
-        if (place?.formatted_address) {
-          setAddress(place.formatted_address);
-        }
-      });
-
-      autocompleteRef.current = autocomplete;
+      try {
+        const autocomplete = new (window as any).google.maps.places.Autocomplete(
+          inputRef.current,
+          { types: ['address'], componentRestrictions: { country: 'us' } }
+        );
+        autocomplete.addListener('place_changed', () => {
+          const place = autocomplete.getPlace();
+          if (place?.formatted_address) {
+            setAddress(place.formatted_address);
+          }
+        });
+        autocompleteRef.current = autocomplete;
+      } catch {
+        // Autocomplete failed to init — text input still works
+      }
     };
 
     fetch('/api/config')
       .then(r => r.json())
       .then(config => {
-        if (!config.mapsApiKey) return;
+        if (cancelled || !config.mapsApiKey) return;
+
+        // Already loaded from a previous visit
         if ((window as any).google?.maps?.places?.Autocomplete) {
           initAutocomplete();
           return;
         }
-        script = document.createElement('script');
+
+        const script = document.createElement('script');
         script.src = `https://maps.googleapis.com/maps/api/js?key=${config.mapsApiKey}&libraries=places&v=weekly`;
         script.async = true;
         script.onload = initAutocomplete;
+        // Silently ignore script load failures — the text input still works
+        script.onerror = () => {};
         document.head.appendChild(script);
-      });
+      })
+      .catch(() => {});
 
-    return () => {
-      if (script && document.head.contains(script)) {
-        document.head.removeChild(script);
-      }
-    };
+    return () => { cancelled = true; };
   }, []);
 
   const handleSave = useCallback(async () => {

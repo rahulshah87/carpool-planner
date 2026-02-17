@@ -1,33 +1,20 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import db from '../db';
+import pool from '../db';
 import { requireAuth } from '../auth';
 
 const router = Router();
 
-interface CommutePreference {
-  id: string;
-  user_id: string;
-  direction: string;
-  earliest_time: string;
-  latest_time: string;
-  days_of_week: string;
-  role: string;
-}
-
 // Get preferences for current user
-router.get('/', requireAuth, (req: Request, res: Response) => {
-  const prefs = db.prepare('SELECT * FROM commute_preferences WHERE user_id = ?').all(req.user!.userId) as CommutePreference[];
-  // Parse days_of_week JSON for each preference
-  const parsed = prefs.map(p => ({
-    ...p,
-    days_of_week: JSON.parse(p.days_of_week),
-  }));
-  res.json(parsed);
+router.get('/', requireAuth, async (req: Request, res: Response) => {
+  const { rows } = await pool.query(
+    'SELECT * FROM commute_preferences WHERE user_id = $1', [req.user!.userId]
+  );
+  res.json(rows);
 });
 
 // Upsert preference (by direction)
-router.put('/', requireAuth, (req: Request, res: Response) => {
+router.put('/', requireAuth, async (req: Request, res: Response) => {
   const { direction, earliest_time, latest_time, days_of_week, role } = req.body;
 
   if (!direction || !earliest_time || !latest_time || !days_of_week || !role) {
@@ -66,33 +53,37 @@ router.put('/', requireAuth, (req: Request, res: Response) => {
   const daysJson = JSON.stringify(days_of_week);
   const userId = req.user!.userId;
 
-  const existing = db.prepare(
-    'SELECT id FROM commute_preferences WHERE user_id = ? AND direction = ?'
-  ).get(userId, direction) as { id: string } | undefined;
+  const { rows: existing } = await pool.query(
+    'SELECT id FROM commute_preferences WHERE user_id = $1 AND direction = $2',
+    [userId, direction]
+  );
 
-  if (existing) {
-    db.prepare(
-      'UPDATE commute_preferences SET earliest_time = ?, latest_time = ?, days_of_week = ?, role = ? WHERE id = ?'
-    ).run(earliest_time, latest_time, daysJson, role, existing.id);
+  if (existing.length > 0) {
+    await pool.query(
+      'UPDATE commute_preferences SET earliest_time = $1, latest_time = $2, days_of_week = $3, role = $4 WHERE id = $5',
+      [earliest_time, latest_time, daysJson, role, existing[0].id]
+    );
   } else {
     const id = uuidv4();
-    db.prepare(
-      'INSERT INTO commute_preferences (id, user_id, direction, earliest_time, latest_time, days_of_week, role) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, userId, direction, earliest_time, latest_time, daysJson, role);
+    await pool.query(
+      'INSERT INTO commute_preferences (id, user_id, direction, earliest_time, latest_time, days_of_week, role) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [id, userId, direction, earliest_time, latest_time, daysJson, role]
+    );
   }
 
-  const prefs = db.prepare('SELECT * FROM commute_preferences WHERE user_id = ?').all(userId) as CommutePreference[];
-  const parsed = prefs.map(p => ({
-    ...p,
-    days_of_week: JSON.parse(p.days_of_week),
-  }));
-  res.json(parsed);
+  const { rows } = await pool.query(
+    'SELECT * FROM commute_preferences WHERE user_id = $1', [userId]
+  );
+  res.json(rows);
 });
 
 // Delete a preference
-router.delete('/:direction', requireAuth, (req: Request, res: Response) => {
+router.delete('/:direction', requireAuth, async (req: Request, res: Response) => {
   const { direction } = req.params;
-  db.prepare('DELETE FROM commute_preferences WHERE user_id = ? AND direction = ?').run(req.user!.userId, direction);
+  await pool.query(
+    'DELETE FROM commute_preferences WHERE user_id = $1 AND direction = $2',
+    [req.user!.userId, direction]
+  );
   res.json({ ok: true });
 });
 

@@ -1,17 +1,17 @@
 import { Router, Request, Response } from 'express';
-import db from '../db';
+import pool from '../db';
 import { requireAuth } from '../auth';
 
 const router = Router();
 
 // Get profile
-router.get('/', requireAuth, (req: Request, res: Response) => {
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user!.userId);
-  if (!user) {
+router.get('/', requireAuth, async (req: Request, res: Response) => {
+  const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user!.userId]);
+  if (rows.length === 0) {
     res.status(404).json({ error: 'User not found' });
     return;
   }
-  res.json(user);
+  res.json(rows[0]);
 });
 
 // Update profile (home address + geocoded coordinates)
@@ -48,12 +48,13 @@ router.put('/', requireAuth, async (req: Request, res: Response) => {
     }
   }
 
-  db.prepare(
-    `UPDATE users SET home_address = ?, home_lat = ?, home_lng = ?, home_neighborhood = ?, updated_at = datetime('now') WHERE id = ?`
-  ).run(home_address || null, lat || null, lng || null, neighborhood, req.user!.userId);
+  await pool.query(
+    `UPDATE users SET home_address = $1, home_lat = $2, home_lng = $3, home_neighborhood = $4, updated_at = NOW() WHERE id = $5`,
+    [home_address || null, lat || null, lng || null, neighborhood, req.user!.userId]
+  );
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user!.userId);
-  res.json(user);
+  const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.user!.userId]);
+  res.json(rows[0]);
 });
 
 export default router;
