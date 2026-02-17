@@ -6,32 +6,33 @@ export default function Profile() {
   const [address, setAddress] = useState(user?.home_address || '');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [acReady, setAcReady] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const autocompleteRef = useRef<any>(null);
+  const acContainerRef = useRef<HTMLDivElement>(null);
+  const placeAcRef = useRef<any>(null);
 
-  // Try to attach Google Places Autocomplete as an optional enhancement.
+  // Try to attach Google Places PlaceAutocompleteElement as an optional enhancement.
   // If the API key is missing or invalid, the plain text input works fine
   // and the server geocodes the address on save.
   useEffect(() => {
     let cancelled = false;
 
     const initAutocomplete = () => {
-      if (cancelled || !inputRef.current) return;
-      if (!(window as any).google?.maps?.places?.Autocomplete) return;
-      if (autocompleteRef.current) return;
-
+      if (cancelled || !acContainerRef.current || placeAcRef.current) return;
+      const PlaceAC = (window as any).google?.maps?.places?.PlaceAutocompleteElement;
+      if (!PlaceAC) return;
       try {
-        const autocomplete = new (window as any).google.maps.places.Autocomplete(
-          inputRef.current,
-          { types: ['address'], componentRestrictions: { country: 'us' } }
-        );
-        autocomplete.addListener('place_changed', () => {
-          const place = autocomplete.getPlace();
-          if (place?.formatted_address) {
-            setAddress(place.formatted_address);
-          }
+        const el = new PlaceAC({
+          types: ['address'],
+          componentRestrictions: { country: 'us' },
         });
-        autocompleteRef.current = autocomplete;
+        acContainerRef.current.appendChild(el);
+        el.addEventListener('gmp-placeselect', async (e: any) => {
+          await e.place.fetchFields({ fields: ['formattedAddress'] });
+          setAddress(e.place.formattedAddress || '');
+        });
+        placeAcRef.current = el;
+        setAcReady(true);
       } catch {
         // Autocomplete failed to init — text input still works
       }
@@ -43,7 +44,7 @@ export default function Profile() {
         if (cancelled || !config.mapsApiKey) return;
 
         // Already loaded from a previous visit
-        if ((window as any).google?.maps?.places?.Autocomplete) {
+        if ((window as any).google?.maps?.places?.PlaceAutocompleteElement) {
           initAutocomplete();
           return;
         }
@@ -64,13 +65,17 @@ export default function Profile() {
   const handleSave = useCallback(async () => {
     setSaving(true);
     setMessage('');
+    // Read from PlaceAutocompleteElement if available (captures free-text entry too),
+    // otherwise fall back to controlled input state.
+    const finalAddress = placeAcRef.current?.value?.trim() || address;
     try {
       const res = await fetch('/api/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ home_address: address }),
+        body: JSON.stringify({ home_address: finalAddress }),
       });
       if (res.ok) {
+        if (finalAddress !== address) setAddress(finalAddress);
         await refreshUser();
         setMessage('Address saved!');
       } else {
@@ -105,16 +110,25 @@ export default function Profile() {
         </p>
         <div className="form-group">
           <label>{address ? 'Change address' : 'Enter your address'}</label>
-          <input
-            ref={inputRef}
-            type="text"
-            className="input"
-            placeholder="Start typing your address..."
-            value={address}
-            onChange={e => setAddress(e.target.value)}
-          />
+          {/* PlaceAutocompleteElement container — always in DOM so the ref is available,
+              shown only after Maps loads successfully */}
+          <div ref={acContainerRef} style={{ display: acReady ? 'block' : 'none' }} />
+          {!acReady && (
+            <input
+              ref={inputRef}
+              type="text"
+              className="input"
+              placeholder="Start typing your address..."
+              value={address}
+              onChange={e => setAddress(e.target.value)}
+            />
+          )}
         </div>
-        <button onClick={handleSave} disabled={saving || !address.trim()} className="btn btn-primary">
+        <button
+          onClick={handleSave}
+          disabled={saving || (!acReady && !address.trim())}
+          className="btn btn-primary"
+        >
           {saving ? 'Saving...' : 'Save Address'}
         </button>
         {message && <p className="form-message">{message}</p>}
