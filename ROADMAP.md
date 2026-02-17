@@ -15,7 +15,7 @@ The initial deployment targets carpooling to **Epic's Verona, WI campus**, but t
 | **Maps / Routing API** | Google Maps Platform (Directions, Distance Matrix, Geocoding) | $200/mo free credit covers this project's scale comfortably — see cost analysis below |
 | **Backend** | Node.js (Express) with TypeScript | Deployed as a Docker container on Cloud Run |
 | **Frontend** | React (Vite) with TypeScript | SPA served from the same Cloud Run container or a CDN bucket |
-| **Database** | SQLite (better-sqlite3) for dev/small scale; Cloud SQL for PostgreSQL at scale | Structured relational data (users, preferences, matches) |
+| **Database** | Cloud SQL (PostgreSQL) | Structured relational data (users, preferences, matches). SQLite was considered for local dev but dropped in favour of a single PostgreSQL stack to keep local and production environments consistent. |
 | **Auth** | Google OAuth 2.0 via Google Identity Services | JWT-based sessions for stateless Cloud Run deployment |
 | **Notifications** | Email + push (web push), user-configurable | Users choose which notification channels they want in their preferences |
 | **Theme** | Dark mode with vibrant purple/coral/emerald palette | Modern feel, easier on eyes for daily use |
@@ -26,8 +26,8 @@ The initial deployment targets carpooling to **Epic's Verona, WI campus**, but t
 
 ```
 ┌──────────────┐       ┌──────────────────┐       ┌───────────────────┐
-│  React SPA   │──────▶│  Express (TS)     │──────▶│  SQLite / Cloud   │
-│  (Vite + TS) │       │  on Cloud Run     │       │  SQL (PG)         │
+│  React SPA   │──────▶│  Express (TS)     │──────▶│  Cloud SQL        │
+│  (Vite + TS) │       │  on Cloud Run     │       │  (PostgreSQL)     │
 └──────────────┘       └────────┬─────────┘       └───────────────────┘
                                 │
                    ┌────────────┼────────────┐
@@ -121,13 +121,13 @@ The goal is to find pairs of users whose routes overlap enough that one could pi
 - [x] Initialize Express + TypeScript project with Docker config
 - [x] Initialize React (Vite + TypeScript) frontend
 - [x] Google OAuth sign-in flow (backend validates ID token, issues JWT session)
-- [x] Basic user profile stored in SQLite
+- [x] Basic user profile stored in PostgreSQL (Cloud SQL)
 - [x] Dockerfile and Cloud Run deploy workflow
 - [ ] CI: lint + test on push *(see Testing section below)*
 
 ### Milestone 2 — User Profile & Address ✅
 - [x] Profile page: display name, email (from Google)
-- [x] Home address input with Google Places Autocomplete (classic API, with manual text input fallback)
+- [x] Home address input with Google Places `PlaceAutocompleteElement` (Places API New), with plain text input fallback
 - [x] Geocode address on save (Google Geocoding API), store lat/lng + neighborhood
 - [x] Commute preferences form: direction, time window, days, driver/rider/either
 - [x] Direction-specific defaults (to work: 7–8:30 AM, from work: 5–6:30 PM)
@@ -246,9 +246,9 @@ The project currently has **no test infrastructure**. The goal is to reach **90%
 | Google OAuth 2.0 | Sign-in | Free |
 | Google Maps Geocoding API | Convert address → lat/lng + neighborhood | $5 / 1,000 requests |
 | Google Maps Distance Matrix API | Compute detour times *(future)* | $5 / 1,000 elements |
-| Google Places Autocomplete | Address input UX (classic API with text input) | $2.83 / 1,000 sessions |
+| Google Places API (New) — PlaceAutocompleteElement | Address input UX with plain text fallback | $2.83 / 1,000 sessions |
 | GCP Cloud Run | Host backend + frontend | Pay per use, generous free tier |
-| GCP Cloud SQL (PostgreSQL) | Production database (SQLite for dev) | ~$7/mo for smallest instance |
+| GCP Cloud SQL (PostgreSQL) | Database (local dev also uses PostgreSQL) | ~$7/mo for smallest instance |
 | SendGrid (or AWS SES) | Email notifications | Free tier: 100 emails/day (SendGrid) |
 | Web Push (VAPID) | Push notifications | Free (browser-native, no third-party cost) |
 
@@ -277,7 +277,7 @@ Swapping is straightforward since all Maps API calls are isolated in the matchin
 
 ## Resolved Questions
 
-1. **Google account address** — Google does not expose a user's home address via standard OAuth scopes. Users enter it manually via a text input enhanced with the classic Places Autocomplete API. Server geocodes on save.
+1. **Google account address** — Google does not expose a user's home address via standard OAuth scopes. Users enter it manually via a text input enhanced with `PlaceAutocompleteElement` (Places API New). Falls back to plain text input if the Maps script fails to load. Server geocodes on save.
 
 2. **Privacy** — Match cards show neighborhood name only (extracted from Google Geocoding `address_components`, not parsed from address string). Full contact details revealed on mutual interest.
 

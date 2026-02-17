@@ -75,7 +75,7 @@ Before the workflow can run you need:
 5. **A Google Maps API key** with these APIs enabled:
    - Maps JavaScript API
    - Geocoding API
-   - Places API
+   - Places API (New)
 
 ---
 
@@ -119,7 +119,7 @@ These variables are set automatically in production by the GitHub Actions workfl
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
 | `GOOGLE_CLIENT_ID` | Yes | OAuth 2.0 client ID |
 | `GOOGLE_CLIENT_SECRET` | Yes | OAuth 2.0 client secret |
-| `GOOGLE_MAPS_API_KEY` | Yes | Maps + Geocoding + Places API key |
+| `GOOGLE_MAPS_API_KEY` | Yes | Key with Maps JavaScript API, Geocoding API, and Places API (New) enabled |
 | `JWT_SECRET` | Yes | Secret for signing JWTs |
 | `BASE_URL` | Yes (prod) | Full URL of the deployed service, e.g. `https://carpool-planner-xxxx-uc.a.run.app` — set automatically by the deploy workflow |
 | `PORT` | No | Server port (default `3000`; Cloud Run sets this to `8080` automatically) |
