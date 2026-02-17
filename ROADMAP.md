@@ -4,7 +4,7 @@
 
 A web application that helps coworkers find carpool partners for commuting to a shared workplace. Users sign in with Google, enter their home address and commute preferences, and the system suggests ranked matches based on route overlap and schedule compatibility.
 
-The initial deployment targets carpooling to **Epic's Verona, WI campus**, but the work destination is app-level configuration so any workplace can use it.
+The initial deployment targets carpooling to **Epic's Verona, WI campus**, but the work destination is app-level configuration so any workplace can use it. 
 
 ---
 
