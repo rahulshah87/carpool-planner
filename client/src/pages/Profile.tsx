@@ -6,37 +6,37 @@ export default function Profile() {
   const [address, setAddress] = useState(user?.home_address || '');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const autocompleteRef = useRef<any>(null);
 
-  // Load Google Maps Places Autocomplete (New)
+  // Attach Google Places Autocomplete to the text input as an enhancement
   useEffect(() => {
     let script: HTMLScriptElement | null = null;
 
     const initAutocomplete = () => {
-      if (!containerRef.current || !(window as any).google?.maps?.places) return;
-      containerRef.current.innerHTML = '';
+      if (!inputRef.current || !(window as any).google?.maps?.places) return;
+      if (autocompleteRef.current) return; // already initialized
 
-      const autocomplete = new (window as any).google.maps.places.PlaceAutocompleteElement({
-        types: ['address'],
-        componentRestrictions: { country: 'us' },
-      });
+      const autocomplete = new (window as any).google.maps.places.Autocomplete(
+        inputRef.current,
+        { types: ['address'], componentRestrictions: { country: 'us' } }
+      );
 
-      autocomplete.addEventListener('gmp-placeselect', async (event: any) => {
-        const { place } = event;
-        await place.fetchFields({ fields: ['formattedAddress'] });
-        if (place.formattedAddress) {
-          setAddress(place.formattedAddress);
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place?.formatted_address) {
+          setAddress(place.formatted_address);
         }
       });
 
-      containerRef.current.appendChild(autocomplete);
+      autocompleteRef.current = autocomplete;
     };
 
     fetch('/api/config')
       .then(r => r.json())
       .then(config => {
         if (!config.mapsApiKey) return;
-        if ((window as any).google?.maps?.places?.PlaceAutocompleteElement) {
+        if ((window as any).google?.maps?.places?.Autocomplete) {
           initAutocomplete();
           return;
         }
@@ -96,14 +96,18 @@ export default function Profile() {
         <p className="text-muted">
           Used to calculate your commute route. Your exact address is never shown to other users.
         </p>
-        {address && (
-          <p style={{ margin: '12px 0', fontWeight: 500 }}>{address}</p>
-        )}
         <div className="form-group">
-          <label>{address ? 'Change address' : 'Search for your address'}</label>
-          <div ref={containerRef} className="autocomplete-container" />
+          <label>{address ? 'Change address' : 'Enter your address'}</label>
+          <input
+            ref={inputRef}
+            type="text"
+            className="input"
+            placeholder="Start typing your address..."
+            value={address}
+            onChange={e => setAddress(e.target.value)}
+          />
         </div>
-        <button onClick={handleSave} disabled={saving || !address} className="btn btn-primary">
+        <button onClick={handleSave} disabled={saving || !address.trim()} className="btn btn-primary">
           {saving ? 'Saving...' : 'Save Address'}
         </button>
         {message && <p className="form-message">{message}</p>}
