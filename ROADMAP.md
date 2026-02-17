@@ -8,17 +8,16 @@ The initial deployment targets carpooling to **Epic's Verona, WI campus**, but t
 
 ---
 
-## Key Design Decisions (needs your input)
+## Design Decisions
 
-| Decision | Recommendation | Alternatives |
+| Decision | Choice | Notes |
 |---|---|---|
-| **Maps / Routing API** | Google Maps Platform (Directions, Distance Matrix, Geocoding) — well-documented, pay-per-use, native GCP integration | Open-source OSRM/Valhalla (free but self-hosted) |
-| **Backend** | Python with FastAPI — good Google client library support, lightweight for Cloud Run | Node.js (Express or Next.js) |
-| **Frontend** | React (Vite) — simple SPA served from the same Cloud Run service or a CDN bucket | Next.js (SSR adds complexity for this use case) |
-| **Database** | Cloud SQL for PostgreSQL — structured relational data (users, preferences, matches) | Firestore (simpler ops, but harder for spatial/relational queries) |
-| **Auth** | Google OAuth 2.0 via Google Identity Services | Firebase Auth (adds a dependency but simplifies token management) |
-
-> **Action needed:** Confirm or change these before development starts. The roadmap below assumes the recommended stack.
+| **Maps / Routing API** | Google Maps Platform (Directions, Distance Matrix, Geocoding) | $200/mo free credit covers this project's scale comfortably — see cost analysis below |
+| **Backend** | Node.js (Express) with TypeScript | Deployed as a Docker container on Cloud Run |
+| **Frontend** | React (Vite) with TypeScript | SPA served from the same Cloud Run container or a CDN bucket |
+| **Database** | Cloud SQL for PostgreSQL | Structured relational data (users, preferences, matches) |
+| **Auth** | Google OAuth 2.0 via Google Identity Services | JWT-based sessions for stateless Cloud Run deployment |
+| **Notifications** | Email + push (web push), user-configurable | Users choose which notification channels they want in their preferences |
 
 ---
 
@@ -26,18 +25,18 @@ The initial deployment targets carpooling to **Epic's Verona, WI campus**, but t
 
 ```
 ┌──────────────┐       ┌──────────────────┐       ┌───────────────────┐
-│  React SPA   │──────▶│  FastAPI backend  │──────▶│  Cloud SQL (PG)   │
-│  (Vite)      │       │  on Cloud Run     │       │                   │
+│  React SPA   │──────▶│  Express (TS)     │──────▶│  Cloud SQL (PG)   │
+│  (Vite + TS) │       │  on Cloud Run     │       │                   │
 └──────────────┘       └────────┬─────────┘       └───────────────────┘
                                 │
                    ┌────────────┼────────────┐
                    ▼            ▼            ▼
-             Google OAuth  Google Maps   (future)
-             (sign-in)     Platform      Cloud Scheduler
-                           APIs          for batch matching
+             Google OAuth  Google Maps   Web Push /
+             (sign-in)     Platform      Email (SendGrid
+                           APIs          or SES)
 ```
 
-All components run on GCP. The FastAPI service is containerized and deployed to **Cloud Run**. Static frontend assets can be served from the same container or from a Cloud Storage bucket behind a CDN — either works for v1.
+All components run on GCP. The Express service is containerized and deployed to **Cloud Run**. Static frontend assets can be served from the same container or from a Cloud Storage bucket behind a CDN — either works for v1.
 
 ---
 
@@ -53,6 +52,9 @@ All components run on GCP. The FastAPI service is containerized and deployed to 
 | home_address | string | free-text, geocoded on save |
 | home_lat | float | geocoded latitude |
 | home_lng | float | geocoded longitude |
+| notify_email | boolean | receive email notifications (default true) |
+| notify_push | boolean | receive push notifications (default false) |
+| push_subscription | jsonb | Web Push subscription object, null if not enrolled |
 | created_at | timestamp | |
 | updated_at | timestamp | |
 
@@ -114,9 +116,9 @@ The goal is to find pairs of users whose routes overlap enough that one could pi
 ## Milestones
 
 ### Milestone 1 — Project Skeleton & Auth
-- [ ] Initialize FastAPI project with Docker + Cloud Run config
-- [ ] Initialize React (Vite) frontend
-- [ ] Google OAuth sign-in flow (backend validates ID token, issues session)
+- [ ] Initialize Express + TypeScript project with Docker + Cloud Run config
+- [ ] Initialize React (Vite + TypeScript) frontend
+- [ ] Google OAuth sign-in flow (backend validates ID token, issues JWT session)
 - [ ] Basic user profile stored in Cloud SQL
 - [ ] CI: lint + test on push
 - [ ] Deploy to Cloud Run (staging)
@@ -138,15 +140,17 @@ The goal is to find pairs of users whose routes overlap enough that one could pi
 
 ### Milestone 4 — Match UI & Contact
 - [ ] Matches page showing ranked carpool partners
-- [ ] Each match card shows: name, approximate detour, schedule overlap, role
-- [ ] "Interested" button that sends an email (or reveals contact info) to the other user
-- [ ] Basic notification when someone expresses interest in carpooling with you
+- [ ] Each match card shows: name, general area, approximate detour, schedule overlap, role
+- [ ] "Interested" button that notifies the other user (via their preferred channels)
+- [ ] Notification preferences UI: toggle email and/or push notifications
+- [ ] Web Push enrollment flow (service worker + subscription)
+- [ ] Email notifications via SendGrid (or SES) when someone expresses interest
 
 ### Milestone 5 — Polish & Production Deploy
 - [ ] App config for workplace destination (name, address, lat/lng) — not hard-coded
 - [ ] Environment-based config (dev/staging/prod)
 - [ ] Rate limiting and basic abuse prevention
-- [ ] Privacy: users only see first name + general area until mutual match
+- [ ] Privacy: users see first name + general area only (full details on mutual interest)
 - [ ] Production Cloud Run deployment with custom domain
 - [ ] Monitoring and alerting (Cloud Logging / Cloud Monitoring)
 
@@ -169,22 +173,47 @@ The goal is to find pairs of users whose routes overlap enough that one could pi
 | Service | Purpose | Pricing notes |
 |---|---|---|
 | Google OAuth 2.0 | Sign-in | Free |
-| Google Maps Geocoding API | Convert address → lat/lng | $5 per 1,000 requests |
-| Google Maps Distance Matrix API | Compute detour times | $5 per 1,000 elements |
-| Google Places Autocomplete | Address input UX | $2.83 per 1,000 sessions (Autocomplete (New)) |
+| Google Maps Geocoding API | Convert address → lat/lng | $5 / 1,000 requests |
+| Google Maps Distance Matrix API | Compute detour times | $5 / 1,000 elements |
+| Google Places Autocomplete | Address input UX | $2.83 / 1,000 sessions |
 | GCP Cloud Run | Host backend + frontend | Pay per use, generous free tier |
 | GCP Cloud SQL (PostgreSQL) | Database | ~$7/mo for smallest instance |
+| SendGrid (or AWS SES) | Email notifications | Free tier: 100 emails/day (SendGrid) |
+| Web Push (VAPID) | Push notifications | Free (browser-native, no third-party cost) |
 
-For a small user base (< 100 users), monthly API costs should be well under $20 assuming nightly batch matching and cached geocodes.
+### Cost analysis for <100 users
+
+Google Maps Platform provides **$200/month in free credit** to every billing account. Estimated monthly usage:
+
+| API | Estimated calls/month | Cost before credit |
+|---|---|---|
+| Geocoding | ~10 (one-time per new user, cached) | ~$0.05 |
+| Distance Matrix | ~15,000 (nightly batch, haversine pre-filtered) | ~$75 |
+| Places Autocomplete | ~100 sessions | ~$0.28 |
+| **Total** | | **~$75 → $0 after free credit** |
+
+At this scale the project runs at **$0/month for Maps APIs**. The $200 credit would support roughly 250+ active users before any charges appear. Cloud SQL (~$7/mo) is the main fixed cost.
+
+### If you ever want to drop Google Maps costs to zero
+
+- **OpenRouteService**: free hosted API (40 req/min, 2,000/day) — enough for <200 users with nightly batching
+- **Mapbox**: 100,000 free API calls/month
+- **OSRM (self-hosted)**: run in a Docker sidecar, zero API cost, ~1-2 GB RAM for Wisconsin region data
+
+Swapping is straightforward since all Maps API calls are isolated in the matching service.
 
 ---
 
-## Open Questions
+## Resolved Questions
 
-1. **Google account address** — Google does not expose a user's home address via standard OAuth scopes. Users will need to enter it manually. The Places Autocomplete widget makes this painless.
+1. **Google account address** — Google does not expose a user's home address via standard OAuth scopes. Users will enter it manually via the Places Autocomplete widget.
 
-2. **Privacy posture** — How much info should users see about potential matches before mutual opt-in? The roadmap assumes first-name + general area until both express interest.
+2. **Privacy** — Users see first name + general area for matches. Full contact details revealed on mutual interest.
 
-3. **Notifications** — Email is simplest for v1. Should we plan for push notifications, or is email sufficient to start?
+3. **Notifications** — Both email and web push, user-configurable in preferences.
 
-4. **Auth session management** — Simple JWT-based sessions, or use a library like `authlib`? JWT is the recommendation for a Cloud Run stateless deployment.
+4. **Tech stack** — Node.js + Express + TypeScript backend, React + Vite + TypeScript frontend.
+
+5. **Auth sessions** — JWT-based, stateless for Cloud Run.
+
+6. **Maps API cost** — Google Maps $200/mo free credit covers this project at <100 users for $0. Alternatives (OpenRouteService, Mapbox, OSRM) available if needed later.
