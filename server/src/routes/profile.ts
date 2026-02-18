@@ -57,4 +57,18 @@ router.put('/', requireAuth, async (req: Request, res: Response) => {
   res.json(rows[0]);
 });
 
+// Update notification preferences
+router.patch('/notifications', requireAuth, async (req: Request, res: Response) => {
+  const { notify_email } = req.body;
+  if (typeof notify_email !== 'boolean') {
+    res.status(400).json({ error: 'notify_email must be a boolean' });
+    return;
+  }
+  await pool.query(
+    'UPDATE users SET notify_email = $1, updated_at = NOW() WHERE id = $2',
+    [notify_email, req.user!.userId]
+  );
+  res.json({ ok: true, notify_email });
+});
+
 export default router;

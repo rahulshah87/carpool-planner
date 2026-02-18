@@ -7,9 +7,20 @@ export default function Profile() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [acReady, setAcReady] = useState(false);
+  const [notifyEmail, setNotifyEmail] = useState<boolean>(true);
+  const [notifySaving, setNotifySaving] = useState(false);
+  const [notifyMessage, setNotifyMessage] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const acContainerRef = useRef<HTMLDivElement>(null);
   const placeAcRef = useRef<any>(null);
+
+  // Load notify_email from profile
+  useEffect(() => {
+    fetch('/api/profile')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.notify_email !== undefined) setNotifyEmail(data.notify_email); })
+      .catch(() => {});
+  }, []);
 
   // Try to attach Google Places PlaceAutocompleteElement as an optional enhancement.
   // If the API key is missing or invalid, the plain text input works fine
@@ -89,6 +100,29 @@ export default function Profile() {
     }
   }, [address, refreshUser]);
 
+  const handleNotifyToggle = useCallback(async () => {
+    const next = !notifyEmail;
+    setNotifySaving(true);
+    setNotifyMessage('');
+    try {
+      const res = await fetch('/api/profile/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notify_email: next }),
+      });
+      if (res.ok) {
+        setNotifyEmail(next);
+        setNotifyMessage(next ? 'Email notifications enabled.' : 'Email notifications disabled.');
+      } else {
+        setNotifyMessage('Failed to update preference.');
+      }
+    } catch {
+      setNotifyMessage('Network error.');
+    } finally {
+      setNotifySaving(false);
+    }
+  }, [notifyEmail]);
+
   return (
     <div className="page">
       <h1>Profile</h1>
@@ -132,6 +166,25 @@ export default function Profile() {
           {saving ? 'Saving...' : 'Save Address'}
         </button>
         {message && <p className="form-message">{message}</p>}
+      </div>
+
+      <div className="card">
+        <h2>Notifications</h2>
+        <p className="text-muted">
+          Choose how you want to be notified when someone expresses interest in carpooling with you.
+        </p>
+        <div className="form-group">
+          <label className="toggle-label">
+            <input
+              type="checkbox"
+              checked={notifyEmail}
+              onChange={handleNotifyToggle}
+              disabled={notifySaving}
+            />
+            {' '}Email me when someone is interested in carpooling with me
+          </label>
+        </div>
+        {notifyMessage && <p className="form-message">{notifyMessage}</p>}
       </div>
     </div>
   );

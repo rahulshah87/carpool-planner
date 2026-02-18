@@ -51,6 +51,21 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_match_user_a ON match_results(user_a_id);
     CREATE INDEX IF NOT EXISTS idx_match_user_b ON match_results(user_b_id);
     CREATE INDEX IF NOT EXISTS idx_prefs_user ON commute_preferences(user_id);
+
+    -- notify_email added to users (ALTER IF NOT EXISTS is safe on re-run)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_email BOOLEAN NOT NULL DEFAULT true;
+
+    CREATE TABLE IF NOT EXISTS interests (
+      id TEXT PRIMARY KEY,
+      from_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      to_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      direction TEXT NOT NULL CHECK (direction IN ('TO_WORK', 'FROM_WORK')),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(from_user_id, to_user_id, direction)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_interests_from ON interests(from_user_id);
+    CREATE INDEX IF NOT EXISTS idx_interests_to ON interests(to_user_id);
   `);
 }
 

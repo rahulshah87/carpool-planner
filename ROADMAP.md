@@ -15,7 +15,7 @@ The initial deployment targets carpooling to **Epic's Verona, WI campus**, but t
 | **Maps / Routing API** | Google Maps Platform (Directions, Distance Matrix, Geocoding) | $200/mo free credit covers this project's scale comfortably — see cost analysis below |
 | **Backend** | Node.js (Express) with TypeScript | Deployed as a Docker container on Cloud Run |
 | **Frontend** | React (Vite) with TypeScript | SPA served from the same Cloud Run container or a CDN bucket |
-| **Database** | SQLite (better-sqlite3) for dev/small scale; Cloud SQL for PostgreSQL at scale | Structured relational data (users, preferences, matches) |
+| **Database** | Cloud SQL (PostgreSQL) | Structured relational data (users, preferences, matches). SQLite was considered for local dev but dropped in favour of a single PostgreSQL stack to keep local and production environments consistent. |
 | **Auth** | Google OAuth 2.0 via Google Identity Services | JWT-based sessions for stateless Cloud Run deployment |
 | **Notifications** | Email + push (web push), user-configurable | Users choose which notification channels they want in their preferences |
 | **Theme** | Dark mode with vibrant purple/coral/emerald palette | Modern feel, easier on eyes for daily use |
@@ -26,8 +26,8 @@ The initial deployment targets carpooling to **Epic's Verona, WI campus**, but t
 
 ```
 ┌──────────────┐       ┌──────────────────┐       ┌───────────────────┐
-│  React SPA   │──────▶│  Express (TS)     │──────▶│  SQLite / Cloud   │
-│  (Vite + TS) │       │  on Cloud Run     │       │  SQL (PG)         │
+│  React SPA   │──────▶│  Express (TS)     │──────▶│  Cloud SQL        │
+│  (Vite + TS) │       │  on Cloud Run     │       │  (PostgreSQL)     │
 └──────────────┘       └────────┬─────────┘       └───────────────────┘
                                 │
                    ┌────────────┼────────────┐
@@ -121,13 +121,13 @@ The goal is to find pairs of users whose routes overlap enough that one could pi
 - [x] Initialize Express + TypeScript project with Docker config
 - [x] Initialize React (Vite + TypeScript) frontend
 - [x] Google OAuth sign-in flow (backend validates ID token, issues JWT session)
-- [x] Basic user profile stored in SQLite
+- [x] Basic user profile stored in PostgreSQL (Cloud SQL)
 - [x] Dockerfile and Cloud Run deploy workflow
-- [ ] CI: lint + test on push *(see Testing section below)*
+- [x] CI: lint + test on push (`.github/workflows/ci.yml` — Vitest for server + client, coverage gate)
 
 ### Milestone 2 — User Profile & Address ✅
 - [x] Profile page: display name, email (from Google)
-- [x] Home address input with Google Places Autocomplete (classic API, with manual text input fallback)
+- [x] Home address input with Google Places `PlaceAutocompleteElement` (Places API New), with plain text input fallback
 - [x] Geocode address on save (Google Geocoding API), store lat/lng + neighborhood
 - [x] Commute preferences form: direction, time window, days, driver/rider/either
 - [x] Direction-specific defaults (to work: 7–8:30 AM, from work: 5–6:30 PM)
@@ -141,32 +141,33 @@ The goal is to find pairs of users whose routes overlap enough that one could pi
 - [x] Rank scoring and storage in MatchResult table
 - [x] Manual recomputation trigger (POST /matches/compute)
 - [x] API endpoint: GET /matches (returns ranked list for current user)
-- [ ] Upgrade to Google Distance Matrix API for real drive times
+- [x] Upgrade to Google Distance Matrix API for real drive times (2 batched calls per compute; falls back to Haversine if API unavailable)
 
-### Milestone 4 — Match UI & Dashboard *(in progress)*
+### Milestone 4 — Match UI & Dashboard ✅
 - [x] Matches page showing ranked carpool partners
 - [x] Match cards show: name, neighborhood, detour, schedule overlap, direction
 - [x] Dashboard with setup checklist (tracks address + schedule completion)
 - [x] Dashboard schedule summary (shows saved commute windows inline)
 - [x] Dark mode with vibrant purple/coral/emerald color scheme
-- [ ] "Interested" button that notifies the other user
-- [ ] Notification preferences UI: toggle email and/or push notifications
-- [ ] Web Push enrollment flow (service worker + subscription)
-- [ ] Email notifications via SendGrid (or SES) when someone expresses interest
+- [x] "Interested" button on match cards; mutual match badge shown when both parties express interest
+- [x] Notification preferences UI: email toggle on Profile page (`PATCH /api/profile/notifications`)
+- [x] Email notifications via SendGrid when someone expresses interest (mutual or one-way); gracefully skipped if `SENDGRID_API_KEY` not set
+- [ ] Web Push enrollment flow (service worker + subscription) — future milestone
 
-### Milestone 5 — Polish & Production Deploy
+### Milestone 5 — Polish & Production Deploy *(in progress)*
 - [x] App config for workplace destination (name, address, lat/lng) via env vars
-- [ ] Environment-based config (dev/staging/prod)
-- [ ] Rate limiting and basic abuse prevention
+- [x] Rate limiting: `express-rate-limit` on all API routes (200/15min general; 30/15min auth; 10/15min compute)
+- [x] Health check endpoint: `GET /healthz`
 - [x] Privacy: match cards show neighborhood only (from Google geocoding, not address parsing)
-- [ ] Production Cloud Run deployment with custom domain
+- [x] Production Cloud Run deployment (active at current Cloud Run URL)
+- [ ] Custom domain
 - [ ] Monitoring and alerting (Cloud Logging / Cloud Monitoring)
 
 ---
 
 ## Testing Strategy
 
-The project currently has **no test infrastructure**. The goal is to reach **90%+ code coverage** enforced on every commit/merge.
+Test infrastructure is in place. Vitest runs on every push via CI. The goal is to reach **90%+ code coverage** enforced on every commit/merge.
 
 ### Framework Choices
 
@@ -246,9 +247,9 @@ The project currently has **no test infrastructure**. The goal is to reach **90%
 | Google OAuth 2.0 | Sign-in | Free |
 | Google Maps Geocoding API | Convert address → lat/lng + neighborhood | $5 / 1,000 requests |
 | Google Maps Distance Matrix API | Compute detour times *(future)* | $5 / 1,000 elements |
-| Google Places Autocomplete | Address input UX (classic API with text input) | $2.83 / 1,000 sessions |
+| Google Places API (New) — PlaceAutocompleteElement | Address input UX with plain text fallback | $2.83 / 1,000 sessions |
 | GCP Cloud Run | Host backend + frontend | Pay per use, generous free tier |
-| GCP Cloud SQL (PostgreSQL) | Production database (SQLite for dev) | ~$7/mo for smallest instance |
+| GCP Cloud SQL (PostgreSQL) | Database (local dev also uses PostgreSQL) | ~$7/mo for smallest instance |
 | SendGrid (or AWS SES) | Email notifications | Free tier: 100 emails/day (SendGrid) |
 | Web Push (VAPID) | Push notifications | Free (browser-native, no third-party cost) |
 
@@ -277,7 +278,7 @@ Swapping is straightforward since all Maps API calls are isolated in the matchin
 
 ## Resolved Questions
 
-1. **Google account address** — Google does not expose a user's home address via standard OAuth scopes. Users enter it manually via a text input enhanced with the classic Places Autocomplete API. Server geocodes on save.
+1. **Google account address** — Google does not expose a user's home address via standard OAuth scopes. Users enter it manually via a text input enhanced with `PlaceAutocompleteElement` (Places API New). Falls back to plain text input if the Maps script fails to load. Server geocodes on save.
 
 2. **Privacy** — Match cards show neighborhood name only (extracted from Google Geocoding `address_components`, not parsed from address string). Full contact details revealed on mutual interest.
 

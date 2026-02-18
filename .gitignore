@@ -4,3 +4,4 @@ server/data/
 .env
 *.log
 *.tsbuildinfo
+coverage/
