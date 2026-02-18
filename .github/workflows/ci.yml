@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Install server dependencies
+        run: npm ci
+        working-directory: server
+
+      - name: Install client dependencies
+        run: npm ci
+        working-directory: client
+
+      - name: Build server (TypeScript)
+        run: npm run build
+        working-directory: server
+
+      - name: Build client (TypeScript + Vite)
+        run: npm run build
+        working-directory: client
+
+      - name: Run server tests with coverage
+        run: npm run test:coverage
+        working-directory: server
+        env:
+          JWT_SECRET: ci-test-secret
+
+      - name: Run client tests with coverage
+        run: npm run test:coverage
+        working-directory: client
+
+      - name: Upload server coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: server-coverage
+          path: server/coverage/
+
+      - name: Upload client coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: client-coverage
+          path: client/coverage/

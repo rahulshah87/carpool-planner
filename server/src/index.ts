@@ -4,12 +4,14 @@ dotenv.config({ path: '../.env' });
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import path from 'path';
+import rateLimit from 'express-rate-limit';
 
 import { initDb } from './db';
 import authRoutes from './routes/auth';
 import profileRoutes from './routes/profile';
 import preferencesRoutes from './routes/preferences';
 import matchRoutes from './routes/matches';
+import interestRoutes from './routes/interests';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -18,11 +20,42 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 app.use(express.json());
 app.use(cookieParser());
 
+// Rate limiting
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many auth attempts, please try again later.' },
+});
+const computeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Match computation rate limit exceeded, please wait before trying again.' },
+});
+
+app.use('/api', generalLimiter);
+app.use('/api/auth', authLimiter);
+app.use('/api/matches/compute', computeLimiter);
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/preferences', preferencesRoutes);
 app.use('/api/matches', matchRoutes);
+app.use('/api/interests', interestRoutes);
+
+// Health check
+app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
 
 // Config endpoint (exposes Maps API key to frontend)
 app.get('/api/config', (_req, res) => {
@@ -66,3 +99,5 @@ app.listen(PORT, '0.0.0.0', () => {
     }
   })(1);
 });
+
+export { app };

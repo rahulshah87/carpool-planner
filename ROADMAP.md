@@ -123,7 +123,7 @@ The goal is to find pairs of users whose routes overlap enough that one could pi
 - [x] Google OAuth sign-in flow (backend validates ID token, issues JWT session)
 - [x] Basic user profile stored in PostgreSQL (Cloud SQL)
 - [x] Dockerfile and Cloud Run deploy workflow
-- [ ] CI: lint + test on push *(see Testing section below)*
+- [x] CI: lint + test on push (`.github/workflows/ci.yml` — Vitest for server + client, coverage gate)
 
 ### Milestone 2 — User Profile & Address ✅
 - [x] Profile page: display name, email (from Google)
@@ -141,32 +141,33 @@ The goal is to find pairs of users whose routes overlap enough that one could pi
 - [x] Rank scoring and storage in MatchResult table
 - [x] Manual recomputation trigger (POST /matches/compute)
 - [x] API endpoint: GET /matches (returns ranked list for current user)
-- [ ] Upgrade to Google Distance Matrix API for real drive times
+- [x] Upgrade to Google Distance Matrix API for real drive times (2 batched calls per compute; falls back to Haversine if API unavailable)
 
-### Milestone 4 — Match UI & Dashboard *(in progress)*
+### Milestone 4 — Match UI & Dashboard ✅
 - [x] Matches page showing ranked carpool partners
 - [x] Match cards show: name, neighborhood, detour, schedule overlap, direction
 - [x] Dashboard with setup checklist (tracks address + schedule completion)
 - [x] Dashboard schedule summary (shows saved commute windows inline)
 - [x] Dark mode with vibrant purple/coral/emerald color scheme
-- [ ] "Interested" button that notifies the other user
-- [ ] Notification preferences UI: toggle email and/or push notifications
-- [ ] Web Push enrollment flow (service worker + subscription)
-- [ ] Email notifications via SendGrid (or SES) when someone expresses interest
+- [x] "Interested" button on match cards; mutual match badge shown when both parties express interest
+- [x] Notification preferences UI: email toggle on Profile page (`PATCH /api/profile/notifications`)
+- [x] Email notifications via SendGrid when someone expresses interest (mutual or one-way); gracefully skipped if `SENDGRID_API_KEY` not set
+- [ ] Web Push enrollment flow (service worker + subscription) — future milestone
 
-### Milestone 5 — Polish & Production Deploy
+### Milestone 5 — Polish & Production Deploy *(in progress)*
 - [x] App config for workplace destination (name, address, lat/lng) via env vars
-- [ ] Environment-based config (dev/staging/prod)
-- [ ] Rate limiting and basic abuse prevention
+- [x] Rate limiting: `express-rate-limit` on all API routes (200/15min general; 30/15min auth; 10/15min compute)
+- [x] Health check endpoint: `GET /healthz`
 - [x] Privacy: match cards show neighborhood only (from Google geocoding, not address parsing)
-- [ ] Production Cloud Run deployment with custom domain
+- [x] Production Cloud Run deployment (active at current Cloud Run URL)
+- [ ] Custom domain
 - [ ] Monitoring and alerting (Cloud Logging / Cloud Monitoring)
 
 ---
 
 ## Testing Strategy
 
-The project currently has **no test infrastructure**. The goal is to reach **90%+ code coverage** enforced on every commit/merge.
+Test infrastructure is in place. Vitest runs on every push via CI. The goal is to reach **90%+ code coverage** enforced on every commit/merge.
 
 ### Framework Choices
 

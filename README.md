@@ -90,8 +90,10 @@ Go to your repository → **Settings → Secrets and variables → Actions → N
 | `DATABASE_URL` | PostgreSQL connection string using Cloud SQL Unix socket | See format below |
 | `GOOGLE_CLIENT_ID` | OAuth 2.0 client ID | GCP Console → APIs & Services → Credentials → your OAuth client |
 | `GOOGLE_CLIENT_SECRET` | OAuth 2.0 client secret | Same location as client ID |
-| `GOOGLE_MAPS_API_KEY` | Maps API key | GCP Console → APIs & Services → Credentials → your API key |
+| `GOOGLE_MAPS_API_KEY` | Maps API key (needs Maps JS, Geocoding, Places API New, Distance Matrix API) | GCP Console → APIs & Services → Credentials → your API key |
 | `JWT_SECRET` | Random secret for signing session tokens | Generate with: `openssl rand -hex 32` |
+| `SENDGRID_API_KEY` | SendGrid API key for email notifications *(optional — skip to disable email)* | [SendGrid](https://sendgrid.com) → Settings → API Keys |
+| `FROM_EMAIL` | Verified sender address for outgoing emails *(required if using SendGrid)* | Must be verified in SendGrid sender authentication |
 
 ### DATABASE_URL format for Cloud SQL
 
@@ -127,6 +129,10 @@ These variables are set automatically in production by the GitHub Actions workfl
 | `WORKPLACE_ADDRESS` | No | Street address of the workplace (default: `1979 Milky Way, Verona, WI 53593`) |
 | `WORK_LAT` | No | Workplace latitude (default: `42.9914`) |
 | `WORK_LNG` | No | Workplace longitude (default: `-89.5326`) |
+| `SENDGRID_API_KEY` | No | SendGrid API key — if absent, email notifications are silently skipped |
+| `FROM_EMAIL` | No | Verified sender email for SendGrid notifications |
+| `DETOUR_THRESHOLD_MIN` | No | Max detour in minutes to include a match (default: `15`) |
+| `DISTANCE_THRESHOLD_MI` | No | Haversine pre-filter radius in miles (default: `30`) |
 
 ---
 

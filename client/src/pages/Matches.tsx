@@ -3,6 +3,7 @@ import MatchCard from '../components/MatchCard';
 
 interface Match {
   id: string;
+  partner_id: string;
   partner_name: string;
   partner_avatar: string | null;
   partner_address: string | null;
@@ -10,6 +11,8 @@ interface Match {
   detour_minutes: number;
   time_overlap_minutes: number;
   rank_score: number;
+  i_expressed_interest: boolean;
+  they_expressed_interest: boolean;
 }
 
 export default function Matches() {
@@ -79,6 +82,8 @@ export default function Matches() {
           {matches.map(m => (
             <MatchCard
               key={m.id}
+              matchId={m.id}
+              partnerId={m.partner_id}
               partnerName={m.partner_name}
               partnerAvatar={m.partner_avatar}
               partnerAddress={m.partner_address}
@@ -86,6 +91,8 @@ export default function Matches() {
               detourMinutes={m.detour_minutes}
               overlapMinutes={m.time_overlap_minutes}
               rankScore={m.rank_score}
+              iExpressedInterest={m.i_expressed_interest}
+              theyExpressedInterest={m.they_expressed_interest}
             />
           ))}
         </div>
