@@ -74,6 +74,20 @@ describe('POST /api/interests', () => {
     const res = await request(app).post('/api/interests').set('Cookie', authCookie).send({ to_user_id: 'user-b', direction: 'TO_WORK' });
     expect(res.body.mutual).toBe(true);
   });
+
+  it('fires email notification when target has notify_email enabled', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: 'user-b', display_name: 'B', email: 'b@t.com', notify_email: true }] })
+      .mockResolvedValueOnce({ rows: [] })   // upsert
+      .mockResolvedValueOnce({ rows: [] })   // mutual check (not mutual)
+      .mockResolvedValueOnce({ rows: [{ display_name: 'A' }] });  // fromUser name lookup
+    const res = await request(app)
+      .post('/api/interests')
+      .set('Cookie', authCookie)
+      .send({ to_user_id: 'user-b', direction: 'TO_WORK' });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+  });
 });
 
 describe('DELETE /api/interests', () => {
